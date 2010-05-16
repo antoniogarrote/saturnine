@@ -1,6 +1,6 @@
 (ns saturnine.handler.internal
   {:skip-wiki true :doc "test"}
-  (:gen-class) 
+  (:gen-class)
   (:import [java.net InetAddress InetSocketAddress URL]
            [java.util.concurrent Executors]
            [java.security KeyStore Security]
@@ -8,19 +8,18 @@
            [javax.net.ssl SSLContext KeyManagerFactory TrustManager SSLEngine]
            [org.jboss.netty.bootstrap ServerBootstrap ClientBootstrap]
 	   [org.jboss.netty.handler.stream ChunkedWriteHandler]
-	   [org.jboss.netty.handler.codec.http DefaultHttpResponse HttpResponseStatus 
+	   [org.jboss.netty.handler.codec.http DefaultHttpResponse HttpResponseStatus
 	    HttpVersion HttpRequestDecoder HttpRequestEncoder HttpChunkAggregator]
            [org.jboss.netty.logging InternalLoggerFactory Log4JLoggerFactory JdkLoggerFactory CommonsLoggerFactory]
-           [org.jboss.netty.channel Channels Channel ChannelPipeline SimpleChannelHandler ChannelFutureListener 
-	    ChannelHandlerContext ChannelStateEvent ChildChannelStateEvent ExceptionEvent UpstreamMessageEvent 
+           [org.jboss.netty.channel Channels Channel ChannelPipeline SimpleChannelHandler ChannelFutureListener
+	    ChannelHandlerContext ChannelStateEvent ChildChannelStateEvent ExceptionEvent UpstreamMessageEvent
 	    DownstreamMessageEvent MessageEvent ChannelFuture]
            [org.jboss.netty.channel.socket.nio NioServerSocketChannelFactory NioClientSocketChannelFactory]
            [org.jboss.netty.channel.socket.oio OioServerSocketChannelFactory OioClientSocketChannelFactory]
            [org.jboss.netty.handler.codec.string StringEncoder StringDecoder]
 	   [org.jboss.netty.handler.ssl SslHandler])
   (:require [clojure.contrib.str-utils2 :as string]
-	    [clojure.contrib.json.read :as jsonr]
-	    [clojure.contrib.json.write :as jsonw]
+	    [clojure.contrib.json :as json]
             [clojure.contrib.logging :as logging])
   (:use [clojure.contrib.logging :only [log]]))
 
@@ -39,8 +38,8 @@
 (defrecord Connection [#^ChannelHandlerContext context #^Channel channel])
 
 (defprotocol Handler
-  (upstream   [x msg] "Handle a received message") 
-  (downstream [x msg] "Handle an outgoing message") 
+  (upstream   [x msg] "Handle a received message")
+  (downstream [x msg] "Handle an outgoing message")
   (connect    [x]     "Handle a new connection")
   (disconnect [x]     "Handle a disconnect")
   (error      [x msg] "Handle an error"))
@@ -58,7 +57,7 @@
   (doto (SSLContext/getInstance "TLS")
     (.init (.getKeyManagers (doto (KeyManagerFactory/getInstance "SunX509")
                               (.init (doto (KeyStore/getInstance "JKS")
-                                       (.load (ClassLoader/getSystemResourceAsStream path) 
+                                       (.load (ClassLoader/getSystemResourceAsStream path)
                                               (.toCharArray key-pass)))
                                      (.toCharArray cert-pass))))
            (into-array [(proxy [TrustManager] []
@@ -67,7 +66,7 @@
                           (checkServerTrusted [x y] nil))])
            nil)))
 
-(defn #^SslHandler get-ssl-handler 
+(defn #^SslHandler get-ssl-handler
   [#^SSLContext ssl-context client-mode starttls]
   (SslHandler. (doto (.createSSLEngine ssl-context)
 		 (.setUseClientMode client-mode))
@@ -90,16 +89,16 @@
       (let [~'ip (.getRemoteAddress (:channel *connection*))]
         ~f)))
 
-(defn listen 
+(defn listen
   ([#^ChannelFuture fut fun]
-     (.addListener fut 
+     (.addListener fut
 		   (reify ChannelFutureListener
 			  (operationComplete [this future]
 			    (if (.isSuccess future)
 			      (fun)
 			      (throw (Exception. "Operation failed")))))))
   ([#^ChannelFuture fut fun fail-fun]
-     (.addListener fut 
+     (.addListener fut
 		   (reify ChannelFutureListener
 			  (operationComplete [this future]
 			    (if (.isSuccess future)
@@ -112,7 +111,7 @@
 
 (defn messageReceived
   [ctx event handlers]
-   (wrap ctx event 
+   (wrap ctx event
         (let [new-state (upstream (@handlers ip) (. event getMessage))]
            (if (not (nil? new-state))
             (dosync (alter handlers assoc ip new-state))))))
@@ -120,34 +119,34 @@
 ; TODO This function blocks on write if connection is unopened
 (defn writeRequested
   [ctx event handlers]
-  (wrap ctx event 
+  (wrap ctx event
         (let [new-state (downstream (@handlers ip) (.getMessage event))]
           (if (not (nil? new-state))
             (dosync (alter handlers assoc ip new-state))))))
 
 (defn channelConnected
   [master ctx event handlers]
-  (wrap ctx event 
+  (wrap ctx event
 	(let [new-state (connect master)]
-	  (dosync (alter handlers assoc 
+	  (dosync (alter handlers assoc
 			 ip (if (nil? new-state) master new-state)))
 	  (.sendUpstream ctx event))))
 
 (defn channelDisconnected
   [ctx event handlers]
-  (wrap ctx event 
+  (wrap ctx event
         (do (disconnect (@handlers ip))
             (dosync (alter handlers dissoc ip))
             (.sendUpstream ctx event))))
 
 (defn exception
   [ctx event handlers]
-  (wrap ctx event 
+  (wrap ctx event
         (do (let [new-state (error (@handlers ip) (bean (.getCause event)))]
               (if new-state (dosync (alter handlers assoc ip new-state)))))))
 
 (defn get-channel-handler
-  [#^::Handler master] 
+  [#^::Handler master]
   (let [handlers (ref {})]
     (proxy [SimpleChannelHandler] []
       (messageReceived     [ctx event] (messageReceived ctx event handlers))
@@ -161,8 +160,8 @@
   (UpstreamMessageEvent. channel msg (.getRemoteAddress channel)))
 
 (defn new-downstream
-  [channel msg] 
-  (DownstreamMessageEvent. channel 
+  [channel msg]
+  (DownstreamMessageEvent. channel
 			   (Channels/succeededFuture channel)
-			   msg 
+			   msg
 			   (.getRemoteAddress channel)))

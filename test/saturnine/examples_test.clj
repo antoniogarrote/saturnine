@@ -13,18 +13,18 @@
 ;;;;
 ;;;; Test Utils
 
-(defn new-sock [port] 
+(defn new-sock [port]
   (doto (Socket. "localhost" port) (.setSoTimeout 10000)))
 
 (defn new-read [sock]
-  (let [in (new BufferedReader 
-		(new InputStreamReader 
+  (let [in (new BufferedReader
+		(new InputStreamReader
 		     (.getInputStream sock)))]
     (fn [] (.readLine in))))
 
 (defn new-write [sock]
-  (let [out (new BufferedWriter 
-		 (new OutputStreamWriter 
+  (let [out (new BufferedWriter
+		 (new OutputStreamWriter
 		      (.getOutputStream sock)))]
     (fn [msg] (do (.write out (str msg) 0 (count (str msg)))
 		  (.newLine out)
@@ -39,8 +39,8 @@
 
 (deftest test-repl-juggling
   (let [server   (start-repl-server)
-	socket-1 (new-sock 2222)
-	socket-2 (new-sock 2222)
+	socket-1 (new-sock 2223)
+	socket-2 (new-sock 2223)
 	write-1  (new-write socket-1)
 	read-1   (new-read socket-1)
 	write-2  (new-write socket-2)
@@ -51,10 +51,10 @@
     (is (= "=> nil" (read-2)))
     (write-1 '(def x (atom [1 2 3 4 5 6 7 8 9 0])))
     (is (= "=> #'clojure.core/x" (read-1)))
-    (write-1 '(defn shuffle [a] 
-		(let [b (rand-int 10) 
-		      c (rand-int 10) 
-		      cc (a b)] 
+    (write-1 '(defn shuffle [a]
+		(let [b (rand-int 10)
+		      c (rand-int 10)
+		      cc (a b)]
 		  (assoc a b (a c) c cc))))
     (is (= "=> #'clojure.core/shuffle" (read-1)))
     (write-1 '(dotimes [_ 10000] (repeatedly (swap! x shuffle))))
@@ -120,7 +120,7 @@
     (stop-server server)))
 
 (defhandler client-handler [a]
-  (upstream [this msg] (condp = msg 
+  (upstream [this msg] (condp = msg
                          "=> "   (if (= @a nil) (write "(+ 1 2 3)"))
                          "6\r\n=> " (swap! a (fn [_] :success))
                          (swap! a (fn [_] :failure)))))
@@ -129,10 +129,10 @@
   (let [lock   (atom nil)
 	server (start-repl-server)
 	client (start-client :blocking :string (new client-handler lock))
-	chan   (open client "localhost" 2222)]
+	chan   (open client "localhost" 2223)]
     (loop [result @lock]      ; Have to make the test block here until the async handler gets a result
       (do (Thread/sleep 100)
-	  (condp = result 
+	  (condp = result
 	    :success (is true)
 	    :failure (is false)
 	    (recur @lock))))

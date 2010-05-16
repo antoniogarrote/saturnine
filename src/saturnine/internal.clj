@@ -1,22 +1,21 @@
 (ns saturnine.internal
-  (:gen-class) 
+  (:gen-class)
   (:import [java.util.concurrent Executors]
            [org.jboss.netty.bootstrap ServerBootstrap ClientBootstrap]
 	   [org.jboss.netty.handler.stream ChunkedWriteHandler]
 	   [org.jboss.netty.handler.codec.frame DelimiterBasedFrameDecoder Delimiters]
-	   [org.jboss.netty.handler.codec.http DefaultHttpResponse HttpResponseStatus 
+	   [org.jboss.netty.handler.codec.http DefaultHttpResponse HttpResponseStatus
 	    HttpVersion HttpRequestDecoder HttpRequestEncoder HttpChunkAggregator]
            [org.jboss.netty.logging InternalLoggerFactory Log4JLoggerFactory JdkLoggerFactory CommonsLoggerFactory]
-           [org.jboss.netty.channel Channels Channel ChannelPipeline SimpleChannelHandler ChannelFutureListener 
-	    ChannelHandlerContext ChannelStateEvent ChildChannelStateEvent ExceptionEvent UpstreamMessageEvent 
+           [org.jboss.netty.channel Channels Channel ChannelPipeline SimpleChannelHandler ChannelFutureListener
+	    ChannelHandlerContext ChannelStateEvent ChildChannelStateEvent ExceptionEvent UpstreamMessageEvent
 	    DownstreamMessageEvent MessageEvent ChannelFuture]
            [org.jboss.netty.channel.socket.nio NioServerSocketChannelFactory NioClientSocketChannelFactory]
            [org.jboss.netty.channel.socket.oio OioServerSocketChannelFactory OioClientSocketChannelFactory]
            [org.jboss.netty.handler.codec.string StringEncoder StringDecoder]
 	   [org.jboss.netty.handler.ssl SslHandler])
   (:require [clojure.contrib.str-utils2 :as string]
-	    [clojure.contrib.json.read :as jsonr]
-	    [clojure.contrib.json.write :as jsonw]
+	    [clojure.contrib.json :as json]
 	    [saturnine.internal.xml :as xml]
             [clojure.contrib.logging :as logging])
   (:use [clojure.contrib.logging :only [log]]
@@ -39,8 +38,8 @@
   (upstream [this msg] (send-down msg)))
 
 (defhandler JSON []
-  (downstream [this msg] (send-down (str (jsonw/json-str msg) "\r\n")))
-  (upstream   [this msg] (send-up (jsonr/read-json msg))))
+  (downstream [this msg] (send-down (str (json/json-str msg) "\r\n")))
+  (upstream   [this msg] (send-up (json/read-json msg))))
 
 (defhandler Print []
   (upstream [this msg] (do (if (string? msg)
@@ -81,7 +80,7 @@
 ;;;; Stateful
 
 (defhandler XML [state tag qname attrs]
-  (upstream [this msg] (loop [tokens (rest msg) 
+  (upstream [this msg] (loop [tokens (rest msg)
 			 {next-state :state messages :messages} (xml/parse this (first msg))]
 		    (doseq [msg messages] (send-up msg))
 		    (if (not (empty? tokens))
@@ -98,7 +97,7 @@
 ;;;;
 ;;;; Startup
 
-(InternalLoggerFactory/setDefaultFactory 
+(InternalLoggerFactory/setDefaultFactory
  (condp = logging/*impl-name*
    "org.apache.log4j"           (Log4JLoggerFactory.)
    "java.util.logging"          (JdkLoggerFactory.)
@@ -125,13 +124,13 @@
 		               :xml    (.addLast pipeline "xml" (get-channel-handler (new XML nil nil nil [])))
 		               :json   (.addLast pipeline "json" (get-channel-handler (new JSON)))
 		               :prompt (.addLast pipeline "prompt" (get-channel-handler (new Prompt))))
-		(vector? s)    (.addLast pipeline "ssl" 
-                                         (get-ssl-handler (apply get-ssl-context (rest s)) false 
+		(vector? s)    (.addLast pipeline "ssl"
+                                         (get-ssl-handler (apply get-ssl-context (rest s)) false
                                                           (condp = (first s)
                                                             :ssl      false
                                                             :starttls true)))
-                true           (do (.addLast pipeline 
-                                             (str "handler_" (.toString s)) 
+                true           (do (.addLast pipeline
+                                             (str "handler_" (.toString s))
                                              (get-channel-handler s))))))
       (.setOption bootstrap "child.tcpNoDelay" true)
       (.setOption bootstrap "child.keepAlive" true)
@@ -141,8 +140,8 @@
 
 (defn empty-server
   [blocking]
-  (new ServerBootstrap 
-       (if blocking 
+  (new ServerBootstrap
+       (if blocking
 	 (new OioServerSocketChannelFactory      ; Blocking
 	      (Executors/newCachedThreadPool)
 	      (Executors/newCachedThreadPool))
