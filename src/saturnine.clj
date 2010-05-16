@@ -55,7 +55,6 @@
 		   handlers
 		   (cons options handlers))
 	bootstrap (apply (partial start-helper (empty-server blocking)) handlers)]
-    (println (str  "Initiated bootstrap" (class bootstrap)))
      (new saturnine.handler.internal.Server bootstrap (.bind bootstrap (InetSocketAddress. port)))))
 
 (defn stop-server
